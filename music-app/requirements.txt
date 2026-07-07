@@ -1,6 +1,0 @@
-flask
-librosa
-numpy
-scipy
-soundfile
-

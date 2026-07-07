@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shazam Clone</title>
+<style>
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: skyblue;
+    color: #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 0.3rem; }
+  p.sub { color: #94a3b8; margin-top: 0; }
+  button {
+    background: #6366f1;
+    color: white;
+    border: none;
+    padding: 18px 36px;
+    font-size: 1.1rem;
+    border-radius: 50px;
+    cursor: pointer;
+    margin-top: 2rem;
+  }
+  button:disabled { background: #475569; cursor: not-allowed; }
+  #status { margin-top: 1.5rem; font-size: 1rem; color: #cbd5e1; min-height: 1.5rem; }
+  #result {
+    margin-top: 1rem;
+    padding: 1rem 1.5rem;
+    background: #1e293b;
+    border-radius: 12px;
+    display: none;
+    text-align: center;
+  }
+  #result h2 { margin: 0 0 4px 0; color: #a5b4fc; }
+</style>
+</head>
+<body>
+  <h1>🎵 Shazam Clone</h1>
+  <p class="sub" style="color:#1e293b">Prototype - 10 song library</p>
+
+  <button id="recordBtn">Hold / Tap to Listen</button>
+  <div id="status" style="color:#1e293b">Tap the button and play some music nearby</div>
+
+  <div id="result">
+    <h2 id="songName"></h2>
+    <div id="confidence"></div>
+  </div>
+
+<script>
+const recordBtn = document.getElementById("recordBtn");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const songNameEl = document.getElementById("songName");
+const confidenceEl = document.getElementById("confidence");
+
+const RECORD_SECONDS = 6;
+
+recordBtn.addEventListener("click", startListening);
+
+async function startListening() {
+  resultEl.style.display = "none";
+  recordBtn.disabled = true;
+  statusEl.textContent = "Requesting microphone access...";
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mediaRecorder = new MediaRecorder(stream);
+    const chunks = [];
+
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((track) => track.stop());
+      statusEl.textContent = "Analyzing audio...";
+
+      const audioBlob = new Blob(chunks, { type: "audio/webm" });
+      await sendToServer(audioBlob);
+    };
+
+    mediaRecorder.start();
+    statusEl.textContent = `Listening... (${RECORD_SECONDS}s)`;
+
+    setTimeout(() => mediaRecorder.stop(), RECORD_SECONDS * 1000);
+  } catch (err) {
+    statusEl.textContent = "Microphone access denied or unavailable.";
+    recordBtn.disabled = false;
+  }
+}
+
+async function sendToServer(audioBlob) {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, "clip.webm");
+
+  try {
+    const response = await fetch("/identify", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await response.json();
+
+    if (data.match) {
+      songNameEl.textContent = data.song;
+      confidenceEl.textContent = `Confidence score: ${data.confidence_score}`;
+      resultEl.style.display = "block";
+      statusEl.textContent = "Match found!";
+    } else {
+      statusEl.textContent = "No match found. Try again closer to the speaker.";
+    }
+  } catch (err) {
+    statusEl.textContent = "Error contacting server.";
+  } finally {
+    recordBtn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
