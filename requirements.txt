@@ -3,4 +3,5 @@ librosa
 numpy
 scipy
 soundfile
-
+mutagen
+werkzeug

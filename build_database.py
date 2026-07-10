@@ -1,10 +1,11 @@
 """
 build_database.py
 ------------------
-Run this ONCE (and again any time you add/change songs) to:
-1. Read every audio file in the songs/ folder
-2. Generate its fingerprint (a set of hashes)
-3. Store everything in a local SQLite database: fingerprints.db
+Run this once (and again whenever you add/change songs) to:
+1. Read every audio file in songs/
+2. Extract metadata (title, artist, album, genre) and embedded cover art
+3. Generate each song's audio fingerprint
+4. Store everything in fingerprints.db (SQLite)
 
 Usage:
     python build_database.py
@@ -12,9 +13,12 @@ Usage:
 
 import os
 import sqlite3
-from fingerprint import fingerprint_file
+
+from fingerprint import fingerprint_file, get_duration_seconds
+from metadata import extract_metadata, extract_cover_art
 
 SONGS_FOLDER = "songs"
+COVERS_FOLDER = "static/covers"
 DB_PATH = "fingerprints.db"
 
 
@@ -22,7 +26,12 @@ def create_tables(conn):
     conn.execute("""
         CREATE TABLE IF NOT EXISTS songs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            artist TEXT,
+            album TEXT,
+            genre TEXT,
+            duration REAL,
+            cover_path TEXT
         )
     """)
     conn.execute("""
@@ -37,31 +46,40 @@ def create_tables(conn):
 
 
 def build_database():
+    os.makedirs(COVERS_FOLDER, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     create_tables(conn)
 
-    # Clear old data so re-running this script is always clean
+    # Clean rebuild every time this script runs
     conn.execute("DELETE FROM songs")
     conn.execute("DELETE FROM hashes")
     conn.commit()
 
-    audio_files = [
+    audio_files = sorted(
         f for f in os.listdir(SONGS_FOLDER)
-        if f.lower().endswith((".mp3", ".wav", ".m4a", ".flac"))
-    ]
+        if f.lower().endswith((".mp3", ".wav", ".m4a", ".flac", ".ogg"))
+    )
 
     if not audio_files:
-        print(f"No audio files found in '{SONGS_FOLDER}/'. "
-              f"Add your 10 songs there first.")
+        print(f"No audio files found in '{SONGS_FOLDER}/'. Add your songs there first.")
         return
 
     for filename in audio_files:
         path = os.path.join(SONGS_FOLDER, filename)
-        song_name = os.path.splitext(filename)[0]
-        print(f"Processing: {song_name} ...")
+        print(f"Processing: {filename} ...")
+
+        meta = extract_metadata(path)
+        duration = get_duration_seconds(path)
+
+        cover_filename = f"{os.path.splitext(filename)[0]}.jpg"
+        cover_full_path = os.path.join(COVERS_FOLDER, cover_filename)
+        has_cover = extract_cover_art(path, cover_full_path)
+        cover_path = f"/static/covers/{cover_filename}" if has_cover else None
 
         cursor = conn.execute(
-            "INSERT INTO songs (name) VALUES (?)", (song_name,)
+            "INSERT INTO songs (name, artist, album, genre, duration, cover_path) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (meta["title"], meta["artist"], meta["album"], meta["genre"], duration, cover_path),
         )
         song_id = cursor.lastrowid
 
@@ -72,7 +90,10 @@ def build_database():
             rows,
         )
         conn.commit()
-        print(f"  -> stored {len(rows)} fingerprint hashes")
+
+        cover_note = "cover art found" if has_cover else "no cover art"
+        print(f"  -> {meta['title']} by {meta['artist']} | "
+              f"{len(rows)} hashes | {duration:.1f}s | {cover_note}")
 
     print(f"\nDatabase build complete. {len(audio_files)} songs indexed in {DB_PATH}")
     conn.close()

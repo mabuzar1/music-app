@@ -1,2 +1,1 @@
-Place your 10 song files here (.mp3, .wav, .m4a, or .flac).
-Then run: python build_database.py
+Place your 10 song files here (.mp3, .wav, .m4a, .flac, .ogg)

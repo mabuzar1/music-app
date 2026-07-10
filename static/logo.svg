@@ -1,0 +1,23 @@
+<svg width="220" height="56" viewBox="0 0 220 56" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="resona-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Mark: concentric sonar rings around a center dot, representing a
+       sound pulse being captured and identified -->
+  <g transform="translate(28,28)">
+    <circle r="24" fill="none" stroke="url(#resona-grad)" stroke-width="1.4" opacity="0.35"/>
+    <circle r="17" fill="none" stroke="url(#resona-grad)" stroke-width="1.8" opacity="0.6"/>
+    <circle r="10" fill="none" stroke="url(#resona-grad)" stroke-width="2.2" opacity="0.85"/>
+    <circle r="4" fill="url(#resona-grad)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="66" y="36" font-family="'Space Grotesk', 'Segoe UI', sans-serif"
+        font-size="26" font-weight="700" letter-spacing="0.5" fill="#F1F5F9">
+    Resona
+  </text>
+</svg>
