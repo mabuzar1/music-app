@@ -1,84 +1,28 @@
-"""
-fingerprint.py
---------------
-Audio fingerprinting engine (Shazam-style "constellation map" approach).
-
-Pipeline:
-    audio file
-      -> load + clean (trim silence, normalize volume)
-      -> spectrogram (STFT / FFT)
-      -> log-scaled magnitude (compresses loud/quiet gap, helps with
-         low-quality recordings)
-      -> banded peak picking (constellation map, noise-resistant)
-      -> peak pairing -> fingerprint hashes
-
-This module is used both when building the database (full songs) and when
-matching a freshly recorded clip, so any accuracy improvement here benefits
-both sides equally.
-"""
-
 import numpy as np
 import librosa
 
 import config
-
-
-def load_audio(file_path):
-    """
-    Load an audio file, convert to mono, resample to a consistent rate,
-    trim leading/trailing silence, and normalize volume.
-
-    Trimming silence matters because a recorded clip often has a second
-    of silence at the start (time to hold the phone up) that shifts every
-    peak's timestamp and can throw off matching. Volume normalization
-    helps recognize quiet or poorly recorded clips.
-    """
+def load_audio(file_path): 
     y, sr = librosa.load(file_path, sr=config.SAMPLE_RATE, mono=True)
-
-    # Trim silence from both ends (top_db=30 means: anything 30dB quieter
-    # than the peak volume counts as silence).
     y_trimmed, _ = librosa.effects.trim(y, top_db=30)
     if len(y_trimmed) > 0:
         y = y_trimmed
-
-    # Normalize peak amplitude to 1.0 so quiet recordings get analyzed
-    # with the same effective "loudness" as clean studio audio.
     peak = np.max(np.abs(y))
     if peak > 1e-8:
         y = y / peak
+    y = librosa.effects.preemphasis(y)
 
     return y, sr
-
-
 def compute_spectrogram(y):
-    """
-    Convert the waveform into a spectrogram using the Short-Time Fourier
-    Transform (STFT), then apply log-scaling to the magnitude.
-
-    Log-scaling compresses the difference between very loud and very quiet
-    frequency content, which mirrors how humans perceive loudness and makes
-    faint-but-real musical tones easier to detect against background noise.
-    """
     stft_result = librosa.stft(y, n_fft=config.N_FFT, hop_length=config.HOP_LENGTH)
     magnitude = np.abs(stft_result)
     log_magnitude = np.log1p(magnitude)  # log1p avoids log(0) issues
     return log_magnitude
-
-
 def find_peaks(spectrogram):
-    """
-    Find the strongest points in the spectrogram using banded peak picking.
-
-    The frequency axis is split into config.NUM_BANDS bands. For every time
-    frame, we keep the single loudest point in each band (if it clears a
-    minimum energy floor). This keeps the number of peaks stable and
-    concentrated on real musical content, rather than letting broadband
-    background noise flood the results the way a single global threshold
-    would.
-    """
     n_freq_bins, n_time_frames = spectrogram.shape
     band_edges = np.linspace(0, n_freq_bins, config.NUM_BANDS + 1, dtype=int)
 
+    global_noise_floor = np.percentile(spectrogram, 35) * config.NOISE_PEAK_FACTOR
     peaks = []
     for t in range(n_time_frames):
         column = spectrogram[:, t]
@@ -89,24 +33,18 @@ def find_peaks(spectrogram):
             band_slice = column[lo:hi]
             local_idx = int(np.argmax(band_slice))
             amplitude = band_slice[local_idx]
-            if amplitude > config.MIN_PEAK_ENERGY:
+            band_noise_floor = np.median(band_slice) * config.NOISE_PEAK_FACTOR
+            threshold = max(config.MIN_PEAK_ENERGY, global_noise_floor, band_noise_floor)
+            if amplitude > threshold:
                 freq_idx = lo + local_idx
                 peaks.append((t, freq_idx))
 
     return peaks
-
-
+def find_beat_peaks(y, sr):
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=config.HOP_LENGTH)
+    _, beat_frames = librosa.beat.beat_track(onset_envelope=onset_env, sr=sr, hop_length=config.HOP_LENGTH)
+    return [(int(frame), config.BEAT_FREQ_INDEX) for frame in beat_frames]
 def generate_hashes(peaks):
-    """
-    Pair each peak ("anchor") with several peaks that follow it in time
-    ("targets"), and encode each pair as a single hash:
-
-        hash = (anchor_frequency, target_frequency, time_gap)
-
-    Returns a list of (hash, anchor_time) tuples. The anchor_time is kept
-    so that, during matching, we can check whether many hashes agree on
-    the same time offset between the clip and a candidate song.
-    """
     peaks = sorted(peaks, key=lambda p: p[0])
     hashes = []
 
@@ -121,22 +59,13 @@ def generate_hashes(peaks):
                     hashes.append((h, t1))
 
     return hashes
-
-
 def fingerprint_file(file_path):
-    """
-    Full pipeline: audio file -> cleaned waveform -> spectrogram -> peaks
-    -> fingerprint hashes. This single function is the one source of truth
-    used everywhere fingerprints are generated, so the database and any
-    incoming clip are always processed identically.
-    """
     y, sr = load_audio(file_path)
     spectrogram = compute_spectrogram(y)
     peaks = find_peaks(spectrogram)
-    hashes = generate_hashes(peaks)
+    beat_peaks = find_beat_peaks(y, sr)
+    combined_peaks = sorted(peaks + beat_peaks, key=lambda p: p[0])
+    hashes = generate_hashes(combined_peaks)
     return hashes
-
-
 def get_duration_seconds(file_path):
-    """Return the duration of an audio file in seconds (for metadata)."""
     return float(librosa.get_duration(path=file_path))

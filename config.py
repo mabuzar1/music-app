@@ -23,6 +23,9 @@ NUM_BANDS = 10                 # number of frequency bands per time frame.
                               # which improves matching accuracy on short clips.
 MIN_PEAK_ENERGY = 1e-4         # peaks quieter than this (near silence) are
                               # ignored so silence doesn't generate noise hashes
+NOISE_PEAK_FACTOR = 1.4        # dynamic threshold factor used per band to
+                              # ignore weak noise peaks in noisy clips.
+BEAT_FREQ_INDEX = 10000        # synthetic frequency used for beat-based fingerprinting
 
 # ---------------------------------------------------------------------------
 # Fingerprint hashing
@@ -43,7 +46,7 @@ RECORD_SECONDS = 12              # Raised from 6 -> 12 seconds. Longer clips
                               # noisy or ambiguous recordings.
 
 # ---------------------------------------------------------------------------
-# Matching / confidence thresholds  <-- THIS SECTION FIXES THE FALSE-POSITIVE BUG
+# Matching / confidence thresholds  <-- THIS SECTION FIXES THE FALSE-POSITIVE 
 # ---------------------------------------------------------------------------
 # The old version accepted a match if it found >= 5 aligned hashes, no matter
 # how small that number was relative to the clip. On a clip that doesn't
@@ -68,6 +71,13 @@ MIN_LEAD_RATIO = 1.5              # 3) the best-scoring song must beat the
                                   #    ratio. Real matches dominate; random
                                   #    noise tends to spread votes evenly
                                   #    across many songs instead.
+
+# ---------------------------------------------------------------------------
+# Short / partial clip handling
+# ---------------------------------------------------------------------------
+SHORT_CLIP_HASH_COUNT = 80      # clips with fewer hashes are treated as short/partial
+MIN_ABSOLUTE_MATCHES_SHORT = 6  # lower absolute vote floor for short clips
+MIN_SHORT_VOTE_RATE = 0.12      # require at least this fraction of clip hashes for short clips
 
 # ---------------------------------------------------------------------------
 # Upload limits

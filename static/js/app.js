@@ -218,7 +218,7 @@ async function submitClip(blobOrFile, filename) {
     if (data.match) {
       showToast("Match found!", "success");
     } else {
-      showToast("No match found in the library.", "error");
+      showToast(data.match_status || "No confident match found.", "error");
     }
     statusText.textContent = "Tap the button and play music nearby";
   } catch (err) {
@@ -243,7 +243,7 @@ function formatDuration(seconds) {
 
 function renderResult(data) {
   const badgeClass = data.match ? "found" : "not-found";
-  const badgeLabel = data.match_status;
+  const badgeLabel = data.match_status || (data.match ? "Match Found" : "No confident match found.");
 
   const coverSrc = data.cover_url || null;
 
@@ -255,8 +255,8 @@ function renderResult(data) {
           : `<div class="cover-art"></div>`
       }
       <div class="result-title-block">
-        <p class="result-title">${data.match ? escapeHtml(data.title) : "No Match Found"}</p>
-        <p class="result-artist">${data.match ? escapeHtml(data.artist) : "This clip did not match any song in the library"}</p>
+        <p class="result-title">${data.match ? escapeHtml(data.title) : "No confident match found."}</p>
+        <p class="result-artist">${data.match ? escapeHtml(data.artist) : "This clip did not match any song in the library."}</p>
         <span class="match-badge ${badgeClass}"><span class="dot"></span>${badgeLabel}</span>
       </div>
     </div>

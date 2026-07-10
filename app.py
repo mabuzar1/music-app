@@ -1,18 +1,3 @@
-"""
-app.py
-------
-Flask backend for the music recognition app.
-
-Endpoints:
-    GET  /                 -> serves the frontend
-    POST /api/identify      -> accepts an audio file, returns identification
-                              result with full metadata, confidence score,
-                              match status, and recognition time
-    GET  /api/health         -> simple health check (useful for deployment
-                              platforms that ping this to confirm the app
-                              is alive)
-"""
-
 import os
 import time
 import tempfile
@@ -48,11 +33,6 @@ def health():
 
 @app.route("/api/identify", methods=["POST"])
 def identify():
-    """
-    Accepts an uploaded audio clip and returns identification results.
-    All error paths return a clear JSON error message and an appropriate
-    HTTP status code instead of a raw stack trace.
-    """
     start_time = time.time()
 
     if "audio" not in request.files:
@@ -62,9 +42,6 @@ def identify():
 
     if audio_file.filename == "":
         return jsonify({"error": "The uploaded file has no name."}), 400
-
-    # Browser MediaRecorder clips often arrive without a normal extension;
-    # accept them but default to .webm so librosa's decoder is picked correctly.
     filename = secure_filename(audio_file.filename) or "clip.webm"
     if "." not in filename:
         filename += ".webm"
@@ -88,8 +65,6 @@ def identify():
         result = identify_song(tmp_path)
 
     except Exception as exc:
-        # Never leak raw exceptions to the client - log the detail
-        # server-side and return a clean, understandable message instead.
         logger.exception("Error while identifying audio")
         return jsonify({
             "error": "Something went wrong while analyzing the audio. "
@@ -105,7 +80,8 @@ def identify():
     if not result["match"]:
         return jsonify({
             "match": False,
-            "match_status": "No Match Found",
+            "match_status": "No confident match found.",
+            "confidence_score": round(result.get("confidence_score", 0), 1),
             "recognition_time_ms": recognition_time_ms,
         })
 
